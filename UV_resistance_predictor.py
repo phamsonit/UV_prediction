@@ -17,10 +17,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn import svm
 from sklearn.linear_model import Perceptron
 
-#from pylab import rcParams
-#rcParams['figure.figsize'] = 5, 4
-#sb.set_style('whitegrid')
-
 
 DEBUG_FLAG = False
 MODEL_STATISTIC = True
@@ -28,21 +24,21 @@ MODEL_STATISTIC = True
 
 ''' load data from csv file '''
 def load_data(address):
-    input_data = pd.read_csv(address)
+    input_data = pd.read_csv(address, sep='\t')
 
     if DEBUG_FLAG:
         print('input data: ')
         print(input_data.info())
-        print(input_data.head())
 
     return input_data
 
 
-''' calculate missing value for a column '''
+''' calculate missing value for a column temperature'''
 def temperature_approx(cols):
-    # show average values of data group by base_column
+    # show average values of data
     # Parch_groups = data.groupby(data[base_column])
     # Parch_groups.mean()
+
     temp = cols[0]
     model = cols[1]
     if pd.isnull(temp):
@@ -77,7 +73,7 @@ def bin_column(data, column, base_column1, base_column2):
 
 
 ''' Converting categorical variable to a dummy indicators'''
-def recode_variable(data, column):
+def categorize_variable(data, column):
     label_encoder = LabelEncoder()
     model_id_cat = data[column]
     model_id_encoder = label_encoder.fit_transform(model_id_cat)
@@ -97,55 +93,70 @@ def recode_variable(data, column):
     return data_dmp
 
 
-def visualize_training_data(data):
+def visualize_data_correlation(data):
     # visualize the correlation between variables
+    plt.figure()
     sb_fig = sb.heatmap(data.corr())
     fig = sb_fig.get_figure()
     fig.savefig('correlation.png')
 
-    # visualize the number of passed and failed UV resistance test
-    sb_fig = sb.countplot(x='UV test result (Resistance)', data=data, palette='hls')
-    fig = sb_fig.get_figure()
+
+def visualize_predictant_variable(data, column):
+    # visualize the number of passed(1) and failed(0) of UV resistance column
+    plt.figure()
+    sb_cnt_fig = sb.countplot(x=column, data=data, palette='hls')
+    fig = sb_cnt_fig.get_figure()
     fig.savefig('countplot.png')
 
 
-def visualize_data_shape(data):
+def visualize_data_shape(data, fig_name):
+    plt.figure()
     sb_fig = sb.distplot(data)
-    sb_fig.set_title("Data distribution")
+    sb_fig.set_title(fig_name)
     fig = sb_fig.get_figure()
-    fig.savefig('data_distribution.png')
+    fig.savefig(fig_name+'.png')
 
 
 ''' reprocessing training data '''
 def reprocessing_data(data):
 
+    # get column names of the data
+    column_names = list(data.columns)
+
     # drop duplicates
     data.drop_duplicates()
 
-    # input missing value for column 'Glass temp. prior coating' based on 'Model ID'
-    input_missing_value(data, 'Glass temp. prior coating', 'Model ID')
+    # input missing value for column 'Glass temp. prior coating'(column id 10) based on 'Model ID' (column id 0)
+    input_missing_value(data, column_names[10], column_names[0])
 
-    # calculate value of column 'UV test result (Resistance)' based on columns 'Min Resistance' and 'Max Resistance'
-    bin_column(data, 'UV test result (Resistance)', 'Min Resistance', 'Max Resistance')
+    # calculate value of column 'UV test result (Resistance)' (column id 11) based on
+    # columns 'Min Resistance' (column id 12) and 'Max Resistance' (column id 13)
+    bin_column(data, column_names[11], column_names[12], column_names[13])
     '''
         if UV test result (Resistance) lies between Min and Max Resistance, the test is considered 'passed'.
         Otherwise, the test is 'failed'            
     '''
 
     # remove unnecessary columns
-    data.drop(['Model ID', 'Glass type', 'Coat date', 'Coating Line'], axis=1, inplace=True)
+    data.drop([column_names[0], column_names[1], column_names[2], column_names[3]], axis=1, inplace=True)
     ''' 
-        Model ID and Glass type can be inferred by Min and Max Resistance
+        Model ID and Glass type can be inferred by Min Resistance and Max Resistance
         Coat date and Coating Line are not necessary for computing result of the UV resistance    
     '''
 
-    # save fig of variable correlation of the available columns
+    # save fig to check variable correlation and size of each class
     if DEBUG_FLAG:
-        visualize_training_data(data)
+        visualize_data_correlation(data)
+        visualize_predictant_variable(data, 'UV test result (Resistance)')
+
+    # show information of data after reprocessing
+    if DEBUG_FLAG:
+        print(data.info())
 
 
 ''' build a model based on given algorithm'''
 def build_model(training_data, alg):
+
     # Deploying and evaluating the model
     X_train, X_test, y_train, y_test = train_test_split(training_data.drop(['UV test result (Resistance)'], axis=1),
                                                         training_data['UV test result (Resistance)'], test_size=0.2,
@@ -156,7 +167,12 @@ def build_model(training_data, alg):
     X_train_scaled = standardize.transform(X_train)
     X_test_scaled = standardize.fit_transform(X_test)
 
-    # store means and var to standardize input prediction data
+    # save fig to check the distribution of training data before and after standardizing
+    if DEBUG_FLAG:
+        visualize_data_shape(X_train, 'X_train')
+        visualize_data_shape(X_train_scaled, 'X_train_scaled')
+
+    # store means and var to standardize the prediction input data
     means = standardize.mean_
     var = standardize.var_
 
@@ -166,6 +182,8 @@ def build_model(training_data, alg):
         # model = LogisticRegression(solver='liblinear', fit_intercept=True, intercept_scaling=4, C=0.5)
         model = LogisticRegression(solver='liblinear')
         model.fit(X_train_scaled, y_train)
+    '''
+    # for comparing the performance of algorithms
     else:
         if alg == 'svm':
             # Support Vector Machine
@@ -178,11 +196,11 @@ def build_model(training_data, alg):
         else:
             print('invalid algorithm name')
             exit(0)
-
+    '''
     # make a prediction
     y_pred = model.predict(X_test_scaled)
 
-    # Model Evaluation
+    # Evaluate model
     if MODEL_STATISTIC:
         print('==================================')
         print('        MODEL PERFORMANCE         ')
@@ -202,7 +220,7 @@ def build_model(training_data, alg):
     return model, means, var
 
 
-def run_prediction(model, means, var, predict_data, algorithm):
+def run_prediction(model, means, var, predict_data):
     print('\n==================================')
     print('      PREDICTION RESULTS        ')
     print('==================================')
@@ -213,34 +231,39 @@ def run_prediction(model, means, var, predict_data, algorithm):
         # standardize input data
         test_uv_scaled = (test_uv - means) / var
         print('predict label :', model.predict(test_uv_scaled))
+        print('probability :', model.predict_proba(test_uv_scaled))
+        print('--------------------------------')
+        '''
+        # for comparing the performance of algorithms
         if algorithm == 'nn':
             print('probability :', model.score(test_uv_scaled, model.predict(test_uv_scaled)))
         else:
             print('probability :', model.predict_proba(test_uv_scaled))
-            print('--------------------------------')
+        '''
 
 
 def main():
 
-    train_data_address = 'triazine_coating_measurements.csv'
-    predict_data_address = 'triazine_predict_data.csv'
+    train_data_address = 'triazine-coating-measurements-combined.csv'
+    predict_data_address = 'triazine-predict-data.csv'
     algorithm = 'lr'
 
     # get input training data and predict data from command line
-    if len(sys.argv) == 4:
+    if len(sys.argv) == 3:
         train_data_address = sys.argv[1]
         predict_data_address = sys.argv[2]
-        algorithm = sys.argv[3]
+        # algorithm = sys.argv[3]
     else:
         print('USAGE:')
         print('python3 UV_resistance_predictor.py training_data predicting_data algorithm')
         print('- training_data is a csv file that contains coating measurements')
         print('- predicting_data is a csv file that contains a set of coating mix need to be predicted')
-        print('- algorithm is one of the follows:')
-        print('  + lr  : Logistic Regression')
-        print('  + svm : Support Vector Machine')
-        print('  + nn  : Neural Networks with a Perceptron')
-        exit(0)
+        # for comparing the performance of algorithms
+        # print('- algorithm is one of the follows:')
+        # print('  + lr  : Logistic Regression')
+        # print('  + svm : Support Vector Machine')
+        # print('  + nn  : Neural Networks with a Perceptron')
+        #exit(0)
 
     # load training data
     training_data = load_data(train_data_address)
@@ -262,7 +285,7 @@ def main():
     #                           'Glass temp. prior coating', 'Min Resistance', 'Max Resistance']
 
     # predict input samples
-    run_prediction(model, means, var, predict_data, algorithm)
+    run_prediction(model, means, var, predict_data)
 
 
 if __name__ == "__main__":
