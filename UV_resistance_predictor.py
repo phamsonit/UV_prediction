@@ -10,8 +10,9 @@ from sklearn.model_selection import cross_val_predict
 from sklearn.preprocessing import LabelEncoder
 from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import StandardScaler
+from sklearn import metrics
 from sklearn.metrics import classification_report
-from sklearn.metrics import precision_score, recall_score
+from sklearn.metrics import precision_score, recall_score, accuracy_score
 from sklearn.metrics import confusion_matrix
 
 from sklearn import svm
@@ -212,10 +213,18 @@ def build_model(training_data, alg):
         print('--------------------------------')
         print('K-fold cross-validation')
         y_train_pred = cross_val_predict(model, X_train_scaled, y_train, cv=10)
-        print('confusion matrices:')
-        print(confusion_matrix(y_train, y_train_pred))
-        print('precision: ', precision_score(y_train, y_train_pred))
-        print('recall:    ', recall_score(y_train, y_train_pred))
+        #print('confusion matrices:')
+        #print(confusion_matrix(y_train, y_train_pred))
+        print('accuracy  : ', accuracy_score(y_train, y_train_pred))
+        print('precision : ', precision_score(y_train, y_train_pred))
+        print('recall    : ', recall_score(y_train, y_train_pred))
+
+        y_pred_proba = model.predict_proba(X_test_scaled)[::, 1]
+        fpr, tpr, _ = metrics.roc_curve(y_test, y_pred_proba)
+        auc = metrics.roc_auc_score(y_test, y_pred_proba)
+        plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
+        plt.legend(loc=4)
+        plt.savefig('ROC-curve.png')
 
     return model, means, var
 

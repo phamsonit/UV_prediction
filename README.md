@@ -31,8 +31,9 @@ For each coating mix, the software produces the following information:
 - probability: [a b]. a is a probabily to have prediction label 0; b is a probability to have prediction label 1
 
 For example, below is prediction results of the software when executing the following command:
-python3 UV_resistance_predictor triazine-coating-measurements-combined.csv triazine-predict-data.csv:
 
+	python3 UV_resistance_predictor triazine-coating-measurements-combined.csv triazine-predict-data.csv
+	
 	==================================
 	      PREDICTION RESULTS        
 	==================================
