@@ -45,7 +45,7 @@ def load_excel_data(address):
 
     return input_data
 
-''' calculate missing value for a column temperature'''
+''' calculate missing value for column temperature'''
 def temperature_approx(cols):
     temp = cols[0]
     model_id = cols[1]
@@ -55,7 +55,7 @@ def temperature_approx(cols):
         else:
             if model_id == 'CZ5':
                 return 32  # average value of column
-                # TODO: we need to calculate missing value for all model ID !
+                # TODO: need to calculate missing value for other model ID !
     else:
         return temp
 

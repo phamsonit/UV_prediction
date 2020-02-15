@@ -1,17 +1,21 @@
 # UV Resistance predictor
-This software was implemented in Python. It required a running machine must have installed Python version 3.7 with necessary libraries such as numpy, pandas, matplotlib, seaborn, sklean.
+This software is used to predict a UV resistance test result of a coating mix. In paritcular, given a dataset of measurements for different glasses in the past, this software can be able to predict whether or not a UV resistance value of a new coating mix will be within the target intervals.
 
-To lanch the program, using the following command:
+#### Usage
+This software was implemented in Python. To run it, a machine must have installed Python version 3.7 with necessary libraries such as numpy, pandas, matplotlib, seaborn, sklean.
+
+To launch the program, using the following command:
 
     python3 UV_resistance_predictor.py training_data predicting_data
 
 **Parameters:**
+
 - `training_data` is a xlsx file that contains coating measurements in the past.
-- `predicting_data` is a csv file that contains a set of coating mix need to be predicted.
+- `predicting_data` is a csv file that contains a set of coating mix required to be predicted.
 
 #### Input data
-- tranining data: The format of training data is the same as the coating measurements that plant experts provided.
-- predicting data is a csv file. The first line presents a list of column names. Each following line corresponds to a coating mix which need to be predicted. *** Note that, the csv files use `Tab` to seperate values ***
+- tranining data: The format of training data is the same coating measurements that experts provided.
+- predicting data is a csv file. The first line presents a list of column names. Each following line corresponds to a coating mix which is needed to be predicted. *** Note that, the csv file uses `Tab` to seperate values ***
 
 For example, predicting data given in `triazine-predict-data.csv` contains following information:
 
@@ -24,15 +28,17 @@ For example, predicting data given in `triazine-predict-data.csv` contains follo
 
 #### Output 
 For each coating mix, the software produces the following information:
+
 - sample : id
 - input values: the input values of coating mix
 - predict label: [1] or [0]. [1] means that the final UV resistance satisfies the given intervals. In contrast, 0 means that the final UV resistance doesn't satisfy the given intervals.
-- probability: [a b]. a is a probabily to have prediction label of 0; b is a probability to have prediction label of 1
+- probability: [x y]. x is a probabily to have prediction label of 0; y is a probability to have prediction label of 1
 
-For example, belows are prediction results of the software when executing the following command:
+For example, belows are results of the software when executing the following command:
 
-    python3 UV_resistance_predictor triazine-coating-measurements.xlsx triazine-predict-data.csv
-	
+`python3 UV_resistance_predictor triazine-coating-measurements.xlsx triazine-predict-data.csv`
+   
+
 	==================================
 	      PREDICTION RESULTS        
 	==================================
@@ -69,4 +75,4 @@ For example, belows are prediction results of the software when executing the fo
 	probability  : 0.9549850424353914
 	
 
-Based on the results, we can see that the final UV resistance of samples 2, 3 and 5 satisfy the intervals with the probabilities of 95%, 90% and 76%, respectively. Whereas, the the final UV resistance of samples 1 and 4 are predicted as failed. The best coating mix is the sample 2.
+Based on the results, we can see that the UV resistance test results of samples 2, 3 and 5 satisfy the intervals with the probabilities of 95%, 90% and 76% respectively. Whereas, the UV resistance test results of samples 1 and 4 are predicted 'failed test'. The best coating mix is the sample 2 because it has the highest probability.
