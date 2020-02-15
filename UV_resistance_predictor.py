@@ -1,3 +1,4 @@
+import os
 import sys
 import numpy as np
 import pandas as pd
@@ -34,20 +35,27 @@ def load_data(address):
     return input_data
 
 
+''' load data from csv file '''
+def load_excel_data(address):
+    input_data = pd.read_excel(address)
+
+    if DEBUG_FLAG:
+        print('input data: ')
+        print(input_data.info())
+
+    return input_data
+
 ''' calculate missing value for a column temperature'''
 def temperature_approx(cols):
-    # show average values of data
-    # Parch_groups = data.groupby(data[base_column])
-    # Parch_groups.mean()
-
     temp = cols[0]
-    model = cols[1]
+    model_id = cols[1]
     if pd.isnull(temp):
-        if model == 'SK2':
+        if model_id == 'SK2':
             return 32  # average temperature of Model ID = SK2
         else:
-            return 31  # average value of column
-            # if data has other missing value cases, we need to calculate them here
+            if model_id == 'CZ5':
+                return 32  # average value of column
+                # TODO: we need to calculate missing value for all model ID !
     else:
         return temp
 
@@ -55,6 +63,10 @@ def temperature_approx(cols):
 ''' input missing values for a column '''
 def input_missing_value(data, column, base_column):
     data[column] = data[[column, base_column]].apply(temperature_approx, axis=1)
+
+    # Parch_groups = data.groupby(data[base_column])
+    # print(Parch_groups.mean())
+    # print(round(data.loc[:, column].mean(), 0))
 
 
 ''' return a binary value '''
@@ -118,14 +130,23 @@ def visualize_data_shape(data, fig_name):
     fig.savefig(fig_name+'.png')
 
 
+def visualize_auc(model, X_test, y_test):
+    y_pred_proba = model.predict_proba(X_test)[::, 1]
+    fpr, tpr, _ = metrics.roc_curve(y_test, y_pred_proba)
+    auc = metrics.roc_auc_score(y_test, y_pred_proba)
+    plt.figure()
+    plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
+    plt.legend(loc=4)
+    plt.savefig('ROC-curve.png')
+
+
 ''' reprocessing training data '''
 def reprocessing_data(data):
-
     # get column names of the data
     column_names = list(data.columns)
 
     # drop duplicates
-    data.drop_duplicates()
+    data.drop_duplicates(inplace=True)
 
     # input missing value for column 'Glass temp. prior coating'(column id 10) based on 'Model ID' (column id 0)
     input_missing_value(data, column_names[10], column_names[0])
@@ -139,7 +160,8 @@ def reprocessing_data(data):
     '''
 
     # remove unnecessary columns
-    data.drop([column_names[0], column_names[1], column_names[2], column_names[3]], axis=1, inplace=True)
+    data.drop([column_names[0], column_names[1], column_names[2], column_names[3]],
+              axis=1, inplace=True)
     ''' 
         Model ID and Glass type can be inferred by Min Resistance and Max Resistance
         Coat date and Coating Line are not necessary for computing result of the UV resistance    
@@ -155,105 +177,136 @@ def reprocessing_data(data):
         print(data.info())
 
 
-''' build a model based on given algorithm'''
-def build_model(training_data, alg):
+# standardize train and test data
+def standardize_data(X_train, X_test):
 
-    # Deploying and evaluating the model
-    X_train, X_test, y_train, y_test = train_test_split(training_data.drop(['UV test result (Resistance)'], axis=1),
-                                                        training_data['UV test result (Resistance)'], test_size=0.2,
-                                                        random_state=200)
-    # standardize train and test data
     standardize = StandardScaler()
     standardize.fit(X_train)
     X_train_scaled = standardize.transform(X_train)
-    X_test_scaled = standardize.fit_transform(X_test)
-
-    # save fig to check the distribution of training data before and after standardizing
-    if DEBUG_FLAG:
-        visualize_data_shape(X_train, 'X_train')
-        visualize_data_shape(X_train_scaled, 'X_train_scaled')
+    X_test_scaled = standardize.transform(X_test)
 
     # store means and var to standardize the prediction input data
     means = standardize.mean_
     var = standardize.var_
 
+    return X_train_scaled, X_test_scaled, means, var
+
+
+def build_LR_model(X_train, y_train):
+    # model = LogisticRegression(solver='liblinear', fit_intercept=True, intercept_scaling=4, C=0.5)
+    model = LogisticRegression(solver='liblinear')
+    model.fit(X_train, y_train)
+    return model
+
+
+# Support Vector Machine
+def build_SVM_model(X_train, y_train):
+    model = svm.SVC(kernel='linear', probability=True)
+    model.fit(X_train, y_train)
+    return model
+
+
+# Neural Networks with a perceptron
+def build_NN_model(X_train, y_train):
+    model = Perceptron()
+    model.fit(X_train, y_train)
+    return model
+
+
+def evaluate_model(model, X_train, X_test, y_train, y_test, agl):
+    print('==================================')
+    print('        MODEL PERFORMANCE         ')
+    print('==================================')
+
+    # make a prediction
+    print('Classification report without cross-validation')
+    y_pred = model.predict(X_test)
+    print(classification_report(y_test, y_pred))
+
+    # K-fold cross-validation & confusion matrices
+    print('--------------------------------')
+    print('K-fold cross-validation (K=10)')
+    y_train_pred = cross_val_predict(model, X_train, y_train, cv=10)
+    # print('confusion matrices:')
+    # print(confusion_matrix(y_train, y_train_pred))
+    print('accuracy  : ', accuracy_score(y_train, y_train_pred))
+    print('precision : ', precision_score(y_train, y_train_pred))
+    print('recall    : ', recall_score(y_train, y_train_pred))
+
+    visualize_auc(model, X_test, y_test)
+
+
+''' build a model based on given algorithm'''
+def build_model(training_data, alg):
+
+    # Deploying and evaluating the model
+    X_train, X_test, y_train, y_test = train_test_split(training_data.drop(['UV test result (Resistance)'], axis=1),
+                                                        training_data['UV test result (Resistance)'], test_size=0.3,
+                                                        random_state=50)
+    # standardize data ???
+    X_train_st, X_test_st, means, var = standardize_data(X_train, X_test)
+
+    # save fig to check the distribution of training data before and after standardizing
+    if DEBUG_FLAG:
+        visualize_data_shape(X_train, 'X_train')
+        visualize_data_shape(X_train_st, 'X_train_standard')
+
     # fit model to data
     if alg == 'lr':
-        # Logistic Regression
-        # model = LogisticRegression(solver='liblinear', fit_intercept=True, intercept_scaling=4, C=0.5)
-        model = LogisticRegression(solver='liblinear')
-        model.fit(X_train_scaled, y_train)
-    '''
-    # for comparing the performance of algorithms
+        model = build_LR_model(X_train_st, y_train)
     else:
         if alg == 'svm':
-            # Support Vector Machine
-            model = svm.SVC(kernel='linear', probability=True)
-            model.fit(X_train_scaled, y_train)
-        elif alg == 'nn':
-                # Neural Networks with a perceptron
-                model = Perceptron()
-                model.fit(X_train_scaled, y_train)
+            model = build_SVM_model(X_train_st, y_train)
         else:
-            print('invalid algorithm name')
-            exit(0)
-    '''
-    # make a prediction
-    y_pred = model.predict(X_test_scaled)
+            #if alg == 'nn':
+                #model = build_NN_model(X_train_st, y_train)
+            #else:
+                print('invalid algorithm name')
+                exit(0)
 
-    # Evaluate model
+    # evaluate model
     if MODEL_STATISTIC:
-        print('==================================')
-        print('        MODEL PERFORMANCE         ')
-        print('==================================')
-        print('Classification report without cross-validation')
-        print(classification_report(y_test, y_pred))
-
-        # K-fold cross-validation & confusion matrices
-        print('--------------------------------')
-        print('K-fold cross-validation')
-        y_train_pred = cross_val_predict(model, X_train_scaled, y_train, cv=10)
-        #print('confusion matrices:')
-        #print(confusion_matrix(y_train, y_train_pred))
-        print('accuracy  : ', accuracy_score(y_train, y_train_pred))
-        print('precision : ', precision_score(y_train, y_train_pred))
-        print('recall    : ', recall_score(y_train, y_train_pred))
-
-        y_pred_proba = model.predict_proba(X_test_scaled)[::, 1]
-        fpr, tpr, _ = metrics.roc_curve(y_test, y_pred_proba)
-        auc = metrics.roc_auc_score(y_test, y_pred_proba)
-        plt.plot(fpr, tpr, label="data 1, auc=" + str(auc))
-        plt.legend(loc=4)
-        plt.savefig('ROC-curve.png')
+        evaluate_model(model, X_train_st, X_test_st, y_train, y_test, alg)
 
     return model, means, var
 
 
 def run_prediction(model, means, var, predict_data):
+    pro = 0
+    sample_id = 0
+    value = []
+
     print('\n==================================')
     print('      PREDICTION RESULTS        ')
     print('==================================')
     for i in range(predict_data.shape[0]):
         test_uv = np.array(predict_data.iloc[i]).reshape(1, -1)
-        print('sample :', str(i + 1))
-        print('input values :', test_uv)
+        print('sample        :', str(i + 1))
+        print('input values  :', test_uv)
         # standardize input data
         test_uv_scaled = (test_uv - means) / var
         print('predict label :', model.predict(test_uv_scaled))
-        print('probability :', model.predict_proba(test_uv_scaled))
+        print('probability   :', model.predict_proba(test_uv_scaled))
         print('--------------------------------')
-        '''
-        # for comparing the performance of algorithms
-        if algorithm == 'nn':
-            print('probability :', model.score(test_uv_scaled, model.predict(test_uv_scaled)))
-        else:
-            print('probability :', model.predict_proba(test_uv_scaled))
-        '''
+
+        # store the best coating mix
+        new_pro = model.predict_proba(test_uv_scaled)[0][1]
+        if new_pro > pro:
+            pro = new_pro
+            sample_id = i+1
+            value = test_uv
+
+    # recommend a best coating mix
+    print('\nThe best coating mix')
+    print('==================================')
+    print('sample       :', sample_id)
+    print('input values :', value)
+    print('probability  :', pro)
 
 
 def main():
 
-    train_data_address = 'triazine-coating-measurements-combined.csv'
+    train_data_address = 'triazine-coating-measurements.xlsx'
     predict_data_address = 'triazine-predict-data.csv'
     algorithm = 'lr'
 
@@ -261,21 +314,23 @@ def main():
     if len(sys.argv) == 3:
         train_data_address = sys.argv[1]
         predict_data_address = sys.argv[2]
-        # algorithm = sys.argv[3]
     else:
-        print('USAGE:')
-        print('python3 UV_resistance_predictor.py training_data predicting_data algorithm')
-        print('- training_data is a csv file that contains coating measurements')
+        print('Invalid parameters, Please using the follow syntax')
+        print('\npython3 UV_resistance_predictor.py training_data predicting_data')
+        print('\n- training_data is a xlsx file that contains coating measurements')
         print('- predicting_data is a csv file that contains a set of coating mix need to be predicted')
-        # for comparing the performance of algorithms
-        # print('- algorithm is one of the follows:')
-        # print('  + lr  : Logistic Regression')
-        # print('  + svm : Support Vector Machine')
-        # print('  + nn  : Neural Networks with a Perceptron')
-        #exit(0)
+        exit(0)
+
+    if not os.path.exists(train_data_address):
+        print('File not found: ', train_data_address)
+        exit(0)
+
+    if not os.path.exists(predict_data_address):
+        print('File not found: ', predict_data_address)
+        exit(0)
 
     # load training data
-    training_data = load_data(train_data_address)
+    training_data = load_excel_data(train_data_address)
     # training_data.columns = ['Model ID', 'Glass type', 'Coat date', 'Coating Line', 'Emulsion Thickness',
     #                             'Triazine % in Paint 1', 'Triazine % in Paint 2', 'Paint 1 Cohesion',
     #                             'Paint 2 Cohesion', 'Paints 1 & 2 Mix Ratio (%)', 'Glass temp. prior coating',
@@ -295,7 +350,6 @@ def main():
 
     # predict input samples
     run_prediction(model, means, var, predict_data)
-
 
 if __name__ == "__main__":
     main()
